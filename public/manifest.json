@@ -21,10 +21,12 @@
       "purpose": "any maskable"
     }
   ],
+        /* pour afficher des screenshots de l'application */
+
   "screenshots": [
     {
       "src": "/accueil.png",
-      "sizes": "870x1890",
+      "sizes": "870x1890",      /* la taille des screenshots doit etre identique */
       "type": "image/png",
       "form_factor": "wide",
       "label": "wonder widgets"
