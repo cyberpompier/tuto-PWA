@@ -5,7 +5,7 @@
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
-  "descruption": "Ceci est un test pour developper une application PWA"
+  "descruption": "Ceci est un test pour developper une application PWA!"
   "orientation": "portrait",
   "icons": [
     {
