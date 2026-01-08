@@ -121,7 +121,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
     setMessage(null);
 
     try {
-      // Utilisation directe de fetch vers l'URL fournie pour éviter les problèmes de résolution de nom de fonction
+      // Utilisation directe de fetch vers l'URL fournie
       const response = await fetch(EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
@@ -136,6 +136,13 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        
+        // Si l'abonnement n'est pas trouvé dans la DB mais que le navigateur dit qu'on est inscrit
+        if (response.status === 404 || (errorData.error && errorData.error.includes('Subscription not found'))) {
+             setIsSubscribed(false); // Force l'interface à redemander l'inscription
+             throw new Error("Abonnement introuvable sur le serveur. Veuillez réactiver les notifications.");
+        }
+        
         throw new Error(errorData.error || `Erreur serveur: ${response.status}`);
       }
       
@@ -143,9 +150,22 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       setCustomMessage("");
     } catch (err: any) {
       console.error("Erreur d'envoi:", err);
-      setMessage(`❌ Erreur: ${err.message}`);
+      setMessage(`❌ ${err.message}`);
     } finally {
       setSending(false);
+    }
+  };
+
+  const testLocalNotification = () => {
+    if (Notification.permission === 'granted') {
+        new Notification("Test Local", {
+            body: "Si vous voyez ceci, votre appareil peut afficher les notifications.",
+            icon: "/icon-192.png"
+        });
+        setMessage("✅ Notification locale envoyée");
+    } else {
+        setMessage("⚠️ Permission non accordée pour le test local");
+        Notification.requestPermission();
     }
   };
 
@@ -173,7 +193,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
         </p>
 
         {message && (
-          <div className={`mb-6 p-3 rounded-lg text-sm font-medium border ${message.includes('❌') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+          <div className={`mb-6 p-3 rounded-lg text-sm font-medium border ${message.includes('❌') || message.includes('⚠️') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
             {message}
           </div>
         )}
@@ -189,16 +209,21 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
             </button>
         ) : (
             <div className="w-full p-5 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col gap-4 text-left">
-                <div className="flex items-center gap-2 text-green-600 font-semibold border-b border-slate-100 pb-2">
-                    <span className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                    </span>
-                    Service Push Actif
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2 text-green-600 font-semibold">
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                        </span>
+                        Service Actif
+                    </div>
+                    <button onClick={testLocalNotification} className="text-xs text-indigo-600 hover:underline">
+                        Test Local
+                    </button>
                 </div>
                 
                 <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-500 uppercase">Message de test</label>
+                    <label className="text-xs font-semibold text-slate-500 uppercase">Message Push (Via Serveur)</label>
                     <textarea 
                         value={customMessage}
                         onChange={(e) => setCustomMessage(e.target.value)}
@@ -207,25 +232,37 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                     />
                 </div>
 
-                <button 
-                  onClick={sendRealPush}
-                  disabled={sending || !customMessage.trim()}
-                  className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium shadow-md shadow-indigo-100 active:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {sending ? (
-                    <>
-                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Envoi en cours...
-                    </>
-                  ) : (
-                    <>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                            <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
+                <div className="flex gap-2">
+                    <button 
+                      onClick={sendRealPush}
+                      disabled={sending || !customMessage.trim()}
+                      className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-medium shadow-md shadow-indigo-100 active:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {sending ? (
+                        <>
+                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Envoi...
+                        </>
+                      ) : (
+                        <>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                                <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
+                            </svg>
+                            Envoyer
+                        </>
+                      )}
+                    </button>
+                    
+                    <button
+                        onClick={subscribeToPush} 
+                        className="px-3 py-2 border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-50"
+                        title="Forcer la resynchronisation"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                            <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.31h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z" clipRule="evenodd" />
                         </svg>
-                        Envoyer notification réelle
-                    </>
-                  )}
-                </button>
+                    </button>
+                </div>
             </div>
         )}
       </div>

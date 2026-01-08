@@ -40,23 +40,13 @@ export const MENU_ITEMS: NavigationItem[] = [
   },
   {
     id: PageId.EXPLORE,
-    label: "Explore",
+    label: "Galerie",
     icon: (active) => <ICONS.Globe active={active} />
-  },
-  {
-    id: PageId.GEO,
-    label: "Carte",
-    icon: (active) => <ICONS.MapPin active={active} />
   },
   {
     id: PageId.PUSH,
     label: "Notif",
     icon: (active) => <ICONS.Bell active={active} />
-  },
-  {
-    id: PageId.PROFILE,
-    label: "Profil",
-    icon: (active) => <ICONS.User active={active} />
   }
 ];
 
@@ -85,7 +75,7 @@ export const PAGES: Record<PageId, PageData> = {
   [PageId.PUSH]: {
     id: PageId.PUSH,
     title: "Alertes",
-    subtitle: "Restez connecté",
+    subtitle: "Test Notification",
     imageUrl: "https://picsum.photos/seed/neon1/800/1000",
     description: "Testez les notifications natives de votre appareil. Fonctionne même lorsque l'application est en arrière-plan."
   },

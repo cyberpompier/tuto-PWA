@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-pwa-v1';
+const CACHE_NAME = 'zen-pwa-v3';
 
 const ASSETS_TO_CACHE = [
   '/',
@@ -7,7 +7,7 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  self.skipWaiting(); // Force l'activation immédiate du nouveau SW
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE).catch(err => {
@@ -27,7 +27,7 @@ self.addEventListener('activate', (event) => {
           }
         })
       )
-    ).then(() => self.clients.claim())
+    ).then(() => self.clients.claim()) // Prend le contrôle de la page immédiatement
   );
 });
 
@@ -38,10 +38,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stratégie Stale-While-Revalidate
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       if (cachedResponse) {
+        // Mise à jour en arrière-plan (Stale-While-Revalidate)
         fetch(request).then(networkResponse => {
             if (networkResponse && networkResponse.status === 200) {
                 const responseToCache = networkResponse.clone();
@@ -61,54 +61,72 @@ self.addEventListener('fetch', (event) => {
         });
         return networkResponse;
       }).catch(() => {
-        // Fallback offline
+        // Fallback si offline et pas de cache
+        return new Response("Offline", { status: 503, statusText: "Offline" });
       });
     })
   );
 });
 
-// Écouteur pour les messages Push venant du serveur (Supabase Edge Function / VAPID)
+// --- Gestion des Notifications Push ---
+
 self.addEventListener('push', function(event) {
-  let data = {};
+  console.log('[Service Worker] Push reçu:', event);
+
+  let data = { 
+    title: 'Zen PWA', 
+    body: 'Nouvelle notification', 
+    url: '/' 
+  };
+
   if (event.data) {
     try {
-      data = event.data.json();
+      const json = event.data.json();
+      data = { ...data, ...json };
     } catch (e) {
-      data = { title: 'Notification', body: event.data.text() };
+      data.body = event.data.text();
     }
   }
 
-  const title = data.title || 'Zen PWA';
   const options = {
-    body: data.body || 'Nouvelle mise à jour disponible',
+    body: data.body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     vibrate: [100, 50, 100],
     data: {
-      url: data.url || '/'
-    }
+      url: data.url
+    },
+    tag: 'zen-pwa-notification', // Remplace les notifs précédentes avec le même tag
+    renotify: true, // Vibre à nouveau même si une notif avec ce tag est déjà visible
+    requireInteraction: true // Sur desktop, empêche la notif de disparaître toute seule
   };
 
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    self.registration.showNotification(data.title, options)
   );
 });
 
-// Clic sur la notification
 self.addEventListener('notificationclick', function(event) {
+  console.log('[Service Worker] Clic sur notification');
   event.notification.close();
   
+  const targetUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
+
   event.waitUntil(
-    clients.matchAll({type: 'window', includeUncontrolled: true}).then(function(clientList) {
-      // Si une fenêtre est déjà ouverte, on la focus
+    clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true
+    }).then(function(clientList) {
+      // Si l'app est déjà ouverte, on focus la fenêtre
       for (var i = 0; i < clientList.length; i++) {
         var client = clientList[i];
-        if (client.url === '/' && 'focus' in client)
+        if (client.url && client.url.includes(targetUrl) && 'focus' in client) {
           return client.focus();
+        }
       }
-      // Sinon on ouvre une nouvelle fenêtre
+      // Sinon, on ouvre une nouvelle fenêtre
       if (clients.openWindow) {
-        return clients.openWindow(event.notification.data.url || '/');
+        return clients.openWindow(targetUrl);
       }
     })
   );
