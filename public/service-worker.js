@@ -10,8 +10,6 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      // On essaye de mettre en cache les assets critiques
-      // Si un asset échoue, l'installation ne plante pas complètement
       return cache.addAll(ASSETS_TO_CACHE).catch(err => {
         console.warn('Erreur lors du pré-cache des fichiers:', err);
       });
@@ -36,45 +34,82 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // 1. Ignorer les requêtes non-HTTP (chrome-extension, etc.)
   if (!request.url.startsWith('http')) {
     return;
   }
 
-  // 2. Stratégie Stale-While-Revalidate pour permettre le cache des CDN (Tailwind, React)
-  // On ne filtre PLUS sur self.location.origin pour permettre aux CDN de fonctionner offline
+  // Stratégie Stale-While-Revalidate
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
-      // Si on a une version en cache, on la retourne
       if (cachedResponse) {
-        // En parallèle, on met à jour le cache pour la prochaine fois (Stale-while-revalidate)
         fetch(request).then(networkResponse => {
             if (networkResponse && networkResponse.status === 200) {
                 const responseToCache = networkResponse.clone();
                 caches.open(CACHE_NAME).then(cache => cache.put(request, responseToCache));
             }
-        }).catch(() => { /* Pas de réseau, pas grave */ });
-        
+        }).catch(() => {});
         return cachedResponse;
       }
 
-      // Sinon on va sur le réseau
       return fetch(request).then((networkResponse) => {
-        // On ne met en cache que les succès
         if (!networkResponse || networkResponse.status !== 200) {
           return networkResponse;
         }
-
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(request, responseToCache);
         });
-
         return networkResponse;
       }).catch(() => {
-        // Fallback offline optionnel (pourrait retourner index.html si c'est une navigation)
-        // return caches.match('/index.html');
+        // Fallback offline
       });
+    })
+  );
+});
+
+// Écouteur pour les messages Push venant du serveur (Supabase Edge Function / VAPID)
+self.addEventListener('push', function(event) {
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data = { title: 'Notification', body: event.data.text() };
+    }
+  }
+
+  const title = data.title || 'Zen PWA';
+  const options = {
+    body: data.body || 'Nouvelle mise à jour disponible',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    vibrate: [100, 50, 100],
+    data: {
+      url: data.url || '/'
+    }
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
+});
+
+// Clic sur la notification
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  
+  event.waitUntil(
+    clients.matchAll({type: 'window', includeUncontrolled: true}).then(function(clientList) {
+      // Si une fenêtre est déjà ouverte, on la focus
+      for (var i = 0; i < clientList.length; i++) {
+        var client = clientList[i];
+        if (client.url === '/' && 'focus' in client)
+          return client.focus();
+      }
+      // Sinon on ouvre une nouvelle fenêtre
+      if (clients.openWindow) {
+        return clients.openWindow(event.notification.data.url || '/');
+      }
     })
   );
 });
