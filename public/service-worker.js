@@ -6,14 +6,21 @@ const ASSETS_TO_CACHE = [
   '/public/manifest.json'
 ];
 
-self.addEventListener('install', (event) => {
+sself.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      cache.addAll(ASSETS_TO_CACHE)
-    )
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const asset of ASSETS_TO_CACHE) {
+        try {
+          await cache.add(asset);
+        } catch (err) {
+          console.warn('Failed to cache', asset, err);
+        }
+      }
+    })
   );
 });
+
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
