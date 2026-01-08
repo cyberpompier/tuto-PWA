@@ -6,21 +6,18 @@ const ASSETS_TO_CACHE = [
   '/public/manifest.json'
 ];
 
-sself.addEventListener('install', (event) => {
+self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      for (const asset of ASSETS_TO_CACHE) {
-        try {
-          await cache.add(asset);
-        } catch (err) {
-          console.warn('Failed to cache', asset, err);
-        }
-      }
+    caches.open(CACHE_NAME).then((cache) => {
+      // On essaye de mettre en cache les assets critiques
+      // Si un asset échoue, l'installation ne plante pas complètement
+      return cache.addAll(ASSETS_TO_CACHE).catch(err => {
+        console.warn('Erreur lors du pré-cache des fichiers:', err);
+      });
     })
   );
 });
-
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -39,31 +36,45 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // ✅ Ignore non-HTTP requests (chrome-extension, data, blob, etc.)
+  // 1. Ignorer les requêtes non-HTTP (chrome-extension, etc.)
   if (!request.url.startsWith('http')) {
     return;
   }
 
-  // ✅ Ignore requests not coming from this site
-  if (!request.url.startsWith(self.location.origin)) {
-    return;
-  }
-
+  // 2. Stratégie Stale-While-Revalidate pour permettre le cache des CDN (Tailwind, React)
+  // On ne filtre PLUS sur self.location.origin pour permettre aux CDN de fonctionner offline
   event.respondWith(
-    caches.open(CACHE_NAME).then((cache) =>
-      cache.match(request).then((cachedResponse) => {
-        const fetchPromise = fetch(request)
-          .then((networkResponse) => {
-            // ✅ Cache only valid responses
+    caches.match(request).then((cachedResponse) => {
+      // Si on a une version en cache, on la retourne
+      if (cachedResponse) {
+        // En parallèle, on met à jour le cache pour la prochaine fois (Stale-while-revalidate)
+        fetch(request).then(networkResponse => {
             if (networkResponse && networkResponse.status === 200) {
-              cache.put(request, networkResponse.clone());
+                const responseToCache = networkResponse.clone();
+                caches.open(CACHE_NAME).then(cache => cache.put(request, responseToCache));
             }
-            return networkResponse;
-          })
-          .catch(() => cachedResponse);
+        }).catch(() => { /* Pas de réseau, pas grave */ });
+        
+        return cachedResponse;
+      }
 
-        return cachedResponse || fetchPromise;
-      })
-    )
+      // Sinon on va sur le réseau
+      return fetch(request).then((networkResponse) => {
+        // On ne met en cache que les succès
+        if (!networkResponse || networkResponse.status !== 200) {
+          return networkResponse;
+        }
+
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(request, responseToCache);
+        });
+
+        return networkResponse;
+      }).catch(() => {
+        // Fallback offline optionnel (pourrait retourner index.html si c'est une navigation)
+        // return caches.match('/index.html');
+      });
+    })
   );
 });

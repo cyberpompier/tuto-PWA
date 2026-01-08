@@ -5,7 +5,7 @@
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
-  "description": "Ceci est un test pour developper une application PWA!",
+  "description": "Une galerie PWA simple et élégante.",
   "orientation": "portrait",
   "icons": [
     {
@@ -21,29 +21,27 @@
       "purpose": "any maskable"
     }
   ],
-        /* pour afficher des screenshots de l'application */
-
   "screenshots": [
     {
       "src": "/accueil.png",
-      "sizes": "870x1890",      /* la taille des screenshots doit etre identique */
+      "sizes": "870x1890",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "wonder widgets"
+      "label": "Accueil"
     },
     {
       "src": "/explorer.png",
       "sizes": "870x1890",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "wonder widgets"
+      "label": "Explorer"
     },
     {
       "src": "/profile.png",
       "sizes": "870x1890",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "wonder widgets"
+      "label": "Profil"
     }
   ]
 }
