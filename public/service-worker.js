@@ -3,7 +3,6 @@ const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/index.tsx',
   // In a real build, you would cache your bundled JS/CSS here.
   // Since we are using a runtime compilation environment for this demo,
   // we cache the shell.
