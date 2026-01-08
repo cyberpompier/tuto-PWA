@@ -3,7 +3,7 @@ const CACHE_NAME = 'zen-pwa-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/public/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
