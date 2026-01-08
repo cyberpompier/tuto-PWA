@@ -22,10 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# Assets binaires
-*.png
-*.jpg
-*.jpeg
-*.webp
-*.ico
