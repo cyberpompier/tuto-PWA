@@ -10,6 +10,7 @@ interface PushViewProps {
 const SUPABASE_URL = 'https://quvdxjxszquqqcvesntn.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1dmR4anhzenF1cXFjdmVzbnRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAwNTk3MTQsImV4cCI6MjA1NTYzNTcxNH0.MB_f2XGYYNwV0CSIjz4W7_KoyNNTkeFMfJZee-N2vKw';
 const VAPID_PUBLIC_KEY = 'BHDClaG8E5f1NTSupTS_xF20XkvJ9sMsjeSYrBHObaDwrXv2h9DkJ_oTdZvOdC8z2tgZtYtKRlVSdml18VCdBr4';
+const EDGE_FUNCTION_URL = 'https://quvdxjxszquqqcvesntn.supabase.co/functions/v1/send-push';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -120,27 +121,36 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
     setMessage(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('send-push', {
-        body: {
+      // Utilisation directe de fetch vers l'URL fournie pour éviter les problèmes de résolution de nom de fonction
+      const response = await fetch(EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        },
+        body: JSON.stringify({
           user_id: getUserId(),
           message: customMessage
-        }
+        })
       });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Erreur serveur: ${response.status}`);
+      }
       
-      setMessage("🚀 Notification envoyée via le serveur !");
+      setMessage("🚀 Notification envoyée avec succès !");
       setCustomMessage("");
     } catch (err: any) {
       console.error("Erreur d'envoi:", err);
-      setMessage("❌ Erreur d'envoi. Avez-vous déployé la Edge Function ?");
+      setMessage(`❌ Erreur: ${err.message}`);
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <div className="px-6 py-8 flex flex-col items-center text-center animate-fade-in">
+    <div className="px-6 py-8 flex flex-col items-center text-center animate-fade-in pb-32">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden mb-8 aspect-[4/5] relative group">
          <img 
            src={data.imageUrl} 
@@ -154,10 +164,10 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
          </div>
       </div>
 
-      <div className="max-w-md mx-auto w-full pb-8">
+      <div className="max-w-md mx-auto w-full">
         <p className="text-slate-600 leading-relaxed text-lg mb-6">
           {isSubscribed 
-            ? "Appareil connecté. Vous pouvez maintenant tester l'envoi réel."
+            ? "Appareil connecté. Envoyez une notification réelle via le cloud."
             : "Activez les notifications pour recevoir des alertes même application fermée."
           }
         </p>
@@ -184,7 +194,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                     </span>
-                    Service Actif
+                    Service Push Actif
                 </div>
                 
                 <div className="space-y-2">
@@ -192,7 +202,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                     <textarea 
                         value={customMessage}
                         onChange={(e) => setCustomMessage(e.target.value)}
-                        placeholder="Tapez votre message ici..."
+                        placeholder="Ex: Alerte météo importante..."
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm resize-none h-24"
                     />
                 </div>
@@ -205,7 +215,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                   {sending ? (
                     <>
                         <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Envoi serveur...
+                        Envoi en cours...
                     </>
                   ) : (
                     <>
@@ -216,9 +226,6 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                     </>
                   )}
                 </button>
-                <p className="text-[10px] text-slate-400 text-center mt-1">
-                    Nécessite le déploiement de la Edge Function `send-push`.
-                </p>
             </div>
         )}
       </div>
