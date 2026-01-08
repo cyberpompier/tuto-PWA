@@ -30,7 +30,9 @@ const urlBase64ToUint8Array = (base64String: string) => {
 export const PushView: React.FC<PushViewProps> = ({ data }) => {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [customMessage, setCustomMessage] = useState("");
   const [permission, setPermission] = useState<NotificationPermission>('default');
 
   useEffect(() => {
@@ -74,6 +76,13 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
 
       // 2. S'inscrire au Push Manager
       const registration = await navigator.serviceWorker.ready;
+      
+      // On se désabonne d'abord pour être sûr d'avoir des clés fraîches si besoin
+      const existingSub = await registration.pushManager.getSubscription();
+      if (existingSub) {
+        await existingSub.unsubscribe();
+      }
+
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
@@ -83,7 +92,6 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       const subJson = subscription.toJSON();
       const userId = getUserId();
 
-      // On utilise upsert pour mettre à jour si l'utilisateur existe déjà
       const { error } = await supabase
         .from('push_subscriptions')
         .upsert({
@@ -97,19 +105,37 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       if (error) throw error;
 
       setIsSubscribed(true);
-      setMessage("Abonnement Push activé avec succès !");
-
-      // Notification locale de confirmation
-      new Notification("Notifications activées", {
-        body: "Vous recevrez désormais les alertes de Zen PWA.",
-        icon: "/icon-192.png"
-      } as any);
-
+      setMessage("✅ Abonnement activé !");
     } catch (err: any) {
       console.error('Erreur inscription:', err);
-      setMessage(`Erreur: ${err.message || 'Impossible de s\'abonner'}`);
+      setMessage(`❌ Erreur: ${err.message || 'Impossible de s\'abonner'}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendRealPush = async () => {
+    if (!customMessage.trim()) return;
+    setSending(true);
+    setMessage(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('send-push', {
+        body: {
+          user_id: getUserId(),
+          message: customMessage
+        }
+      });
+
+      if (error) throw error;
+      
+      setMessage("🚀 Notification envoyée via le serveur !");
+      setCustomMessage("");
+    } catch (err: any) {
+      console.error("Erreur d'envoi:", err);
+      setMessage("❌ Erreur d'envoi. Avez-vous déployé la Edge Function ?");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -128,16 +154,16 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
          </div>
       </div>
 
-      <div className="max-w-md mx-auto w-full">
-        <p className="text-slate-600 leading-relaxed text-lg mb-8">
+      <div className="max-w-md mx-auto w-full pb-8">
+        <p className="text-slate-600 leading-relaxed text-lg mb-6">
           {isSubscribed 
-            ? "Votre appareil est connecté au serveur de notifications. Vous recevrez les alertes même application fermée."
-            : "Activez les notifications Push pour rester informé en temps réel, même lorsque l'application est fermée."
+            ? "Appareil connecté. Vous pouvez maintenant tester l'envoi réel."
+            : "Activez les notifications pour recevoir des alertes même application fermée."
           }
         </p>
 
         {message && (
-          <div className={`mb-6 p-3 rounded-lg text-sm border ${message.includes('Erreur') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+          <div className={`mb-6 p-3 rounded-lg text-sm font-medium border ${message.includes('❌') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
             {message}
           </div>
         )}
@@ -148,35 +174,51 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                 disabled={loading}
                 className="w-full px-8 py-3 bg-indigo-600 text-white rounded-full font-semibold shadow-lg shadow-indigo-200 active:bg-indigo-700 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
             >
-                {loading ? (
-                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                        <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-2.829-2h5.658A3 3 0 0110 18z" />
-                    </svg>
-                )}
-                Activer les notifications Push
+                {loading ? <span className="animate-spin text-xl">◌</span> : null}
+                Activer les notifications
             </button>
         ) : (
-            <div className="w-full p-4 bg-slate-100 rounded-xl border border-slate-200 flex flex-col items-center gap-3">
-                <div className="flex items-center gap-2 text-green-600 font-semibold">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
-                    </svg>
-                    Notifications actives
+            <div className="w-full p-5 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col gap-4 text-left">
+                <div className="flex items-center gap-2 text-green-600 font-semibold border-b border-slate-100 pb-2">
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                    </span>
+                    Service Actif
                 </div>
-                <p className="text-xs text-slate-500 text-center">
-                    ID Client: <br/>
-                    <code className="bg-white px-1 py-0.5 rounded border border-slate-300 select-all">
-                        {localStorage.getItem('zen_pwa_user_id')?.split('-')[0]}...
-                    </code>
-                </p>
+                
+                <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-500 uppercase">Message de test</label>
+                    <textarea 
+                        value={customMessage}
+                        onChange={(e) => setCustomMessage(e.target.value)}
+                        placeholder="Tapez votre message ici..."
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm resize-none h-24"
+                    />
+                </div>
+
                 <button 
-                  onClick={() => new Notification("Test Local", { body: "Ceci vérifie que l'autorisation est valide.", icon: "/icon-192.png"} as any)}
-                  className="text-sm text-indigo-600 font-medium hover:underline mt-2"
+                  onClick={sendRealPush}
+                  disabled={sending || !customMessage.trim()}
+                  className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium shadow-md shadow-indigo-100 active:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Envoyer un test local
+                  {sending ? (
+                    <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Envoi serveur...
+                    </>
+                  ) : (
+                    <>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                            <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
+                        </svg>
+                        Envoyer notification réelle
+                    </>
+                  )}
                 </button>
+                <p className="text-[10px] text-slate-400 text-center mt-1">
+                    Nécessite le déploiement de la Edge Function `send-push`.
+                </p>
             </div>
         )}
       </div>
