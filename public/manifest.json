@@ -5,7 +5,7 @@
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
-  "descruption": "Ceci est un test pour developper une application PWA!",
+  "description": "Ceci est un test pour developper une application PWA!",
   "orientation": "portrait",
   "icons": [
     {
@@ -26,19 +26,22 @@
       "src": "/accueil.png",
       "sizes": "870x1890",
       "type": "image/png",
-      "purpose": "any maskable"
+      "form_factor": "wide",
+      "label": "wonder widgets"
     },
     {
       "src": "/explorer.png",
       "sizes": "870x1890",
       "type": "image/png",
-      "purpose": "any maskable"
+      "form_factor": "wide",
+      "label": "wonder widgets"
     },
     {
       "src": "/profile.png",
       "sizes": "870x1890",
       "type": "image/png",
-      "purpose": "any maskable"
+      "form_factor": "wide",
+      "label": "wonder widgets"
     }
   ]
 }
