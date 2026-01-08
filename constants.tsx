@@ -19,6 +19,17 @@ export const ICONS = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
     </svg>
   ),
+  MapPin: ({ active }: { active: boolean }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+    </svg>
+  ),
+  Bell: ({ active }: { active: boolean }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+    </svg>
+  )
 };
 
 export const MENU_ITEMS: NavigationItem[] = [
@@ -31,6 +42,16 @@ export const MENU_ITEMS: NavigationItem[] = [
     id: PageId.EXPLORE,
     label: "Explore",
     icon: (active) => <ICONS.Globe active={active} />
+  },
+  {
+    id: PageId.GEO,
+    label: "Carte",
+    icon: (active) => <ICONS.MapPin active={active} />
+  },
+  {
+    id: PageId.PUSH,
+    label: "Notif",
+    icon: (active) => <ICONS.Bell active={active} />
   },
   {
     id: PageId.PROFILE,
@@ -53,6 +74,20 @@ export const PAGES: Record<PageId, PageData> = {
     subtitle: "Découvrez le monde",
     imageUrl: "https://picsum.photos/seed/arch2/800/1000",
     description: "Parcourez des images haute définition. Le défilement est fluide et indépendant du header et du footer."
+  },
+  [PageId.GEO]: {
+    id: PageId.GEO,
+    title: "Position",
+    subtitle: "Localisation GPS",
+    imageUrl: "https://picsum.photos/seed/map1/800/1000",
+    description: "Utilisez l'API de géolocalisation pour trouver votre position actuelle sur le globe."
+  },
+  [PageId.PUSH]: {
+    id: PageId.PUSH,
+    title: "Alertes",
+    subtitle: "Restez connecté",
+    imageUrl: "https://picsum.photos/seed/neon1/800/1000",
+    description: "Testez les notifications natives de votre appareil. Fonctionne même lorsque l'application est en arrière-plan."
   },
   [PageId.PROFILE]: {
     id: PageId.PROFILE,

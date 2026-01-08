@@ -3,7 +3,9 @@ import React from 'react';
 export enum PageId {
   HOME = 'home',
   EXPLORE = 'explore',
-  PROFILE = 'profile'
+  PROFILE = 'profile',
+  GEO = 'geo',
+  PUSH = 'push'
 }
 
 export interface PageData {

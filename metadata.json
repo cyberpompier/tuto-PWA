@@ -1,5 +1,7 @@
 {
   "name": "Zen PWA Gallery",
   "description": "A streamlined Progressive Web App with fixed navigation and immersive imagery.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "geolocation"
+  ]
 }
