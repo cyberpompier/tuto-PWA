@@ -27,7 +27,9 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{msg: string, type: 'error' | 'success' | 'info'} | null>(null);
   const [customMessage, setCustomMessage] = useState("");
-  const [permissionState, setPermissionState] = useState<NotificationPermission>(typeof Notification !== 'undefined' ? Notification.permission : 'default');
+  const [permissionState, setPermissionState] = useState<NotificationPermission>(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
 
   useEffect(() => {
     checkSubscription();
@@ -46,31 +48,25 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
     }
   };
 
-  const resetAndSubscribe = async () => {
+  const handleSubscribeClick = async () => {
     setLoading(true);
-    setStatus({ msg: "Nettoyage du service...", type: 'info' });
+    setStatus({ msg: "Initialisation...", type: 'info' });
     
     try {
-      // 1. Désinscription forcée du SW pour réinitialiser l'état
-      if ('serviceWorker' in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        for (let registration of registrations) {
-          await registration.unregister();
-        }
-        // Re-enregistrement
-        await navigator.serviceWorker.register('/service-worker.js');
+      if (!('serviceWorker' in navigator)) {
+        throw new Error("Votre navigateur ne supporte pas les Service Workers.");
       }
 
-      // 2. Demande explicite de permission
+      // Demande de permission
       const perm = await Notification.requestPermission();
       setPermissionState(perm);
       
       if (perm === 'denied') {
-        throw new Error("Vous avez bloqué les notifications. Allez dans les paramètres de votre navigateur pour les réactiver.");
+        throw new Error("Notifications bloquées. Veuillez les autoriser dans les paramètres du site.");
       }
 
       if (perm === 'granted') {
-        await subscribe();
+        await subscribeUser();
       }
     } catch (err: any) {
       setStatus({ msg: `❌ ${err.message}`, type: 'error' });
@@ -79,17 +75,19 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
     }
   };
 
-  const subscribe = async () => {
-    setLoading(true);
-    setStatus({ msg: "Génération de l'abonnement push...", type: 'info' });
-
+  const subscribeUser = async () => {
     try {
       const reg = await navigator.serviceWorker.ready;
       
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-      });
+      // On s'assure d'avoir un abonnement propre
+      let sub = await reg.pushManager.getSubscription();
+      
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+      }
 
       const subJson = sub.toJSON();
       let userId = localStorage.getItem('zen_pwa_user_id') || crypto.randomUUID();
@@ -109,17 +107,18 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       if (error) throw new Error(`Base de données: ${error.message}`);
 
       setIsSubscribed(true);
-      setStatus({ msg: "✅ Notifications prêtes !", type: 'success' });
+      setStatus({ msg: "✅ Notifications activées !", type: 'success' });
     } catch (err: any) {
-      setStatus({ msg: `❌ ${err.message}`, type: 'error' });
-    } finally {
-      setLoading(false);
+      console.error(err);
+      throw new Error("Échec de l'abonnement push.");
     }
   };
 
   const sendBroadcast = async () => {
     if (!customMessage.trim()) return;
     setLoading(true);
+    setStatus({ msg: "Envoi en cours...", type: 'info' });
+
     try {
       const response = await fetch(EDGE_FUNCTION_URL, {
         method: 'POST',
@@ -131,9 +130,9 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       });
 
       const resData = await response.json();
-      if (!response.ok) throw new Error(resData.error || "Erreur lors de la diffusion.");
+      if (!response.ok) throw new Error(resData.error || "Erreur de diffusion.");
 
-      setStatus({ msg: `🚀 Diffusé à ${resData.sentTo} appareil(s).`, type: 'success' });
+      setStatus({ msg: `🚀 Message envoyé à ${resData.sentTo} appareil(s).`, type: 'success' });
       setCustomMessage("");
     } catch (err: any) {
       setStatus({ msg: `❌ ${err.message}`, type: 'error' });
@@ -152,15 +151,8 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       </div>
 
       <div className="w-full max-w-md space-y-4">
-        {/* Diagnostic de permission */}
-        {permissionState === 'denied' && (
-            <div className="p-4 bg-red-100 text-red-700 rounded-xl text-xs font-bold border border-red-200">
-                ⚠️ Notifications bloquées par votre navigateur. Réinitialisez les permissions du site.
-            </div>
-        )}
-
         {status && (
-          <div className={`p-4 rounded-2xl text-sm font-semibold border ${
+          <div className={`p-4 rounded-2xl text-sm font-semibold border animate-in fade-in slide-in-from-top-2 ${
             status.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' : 
             status.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 
             'bg-indigo-50 text-indigo-700 border-indigo-100'
@@ -169,37 +161,46 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
           </div>
         )}
 
+        {permissionState === 'denied' && (
+            <div className="p-4 bg-amber-50 text-amber-800 rounded-xl text-xs border border-amber-100">
+                L'accès aux notifications est bloqué. Réinitialisez les permissions dans la barre d'adresse de votre navigateur.
+            </div>
+        )}
+
         {!isSubscribed ? (
-          <div className="space-y-2">
-            <button 
-                onClick={resetAndSubscribe}
-                disabled={loading}
-                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-all disabled:opacity-50"
-            >
-                {loading ? "Veuillez patienter..." : "Activer les Notifications"}
-            </button>
-            <p className="text-[10px] text-slate-400 text-center uppercase tracking-widest font-bold">
-                Requiert HTTPS et autorisation navigateur
-            </p>
-          </div>
+          <button 
+              onClick={handleSubscribeClick}
+              disabled={loading}
+              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-all disabled:opacity-50"
+          >
+              {loading ? "Chargement..." : "Activer les Notifications"}
+          </button>
         ) : (
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-600">Appareil enregistré</span>
-                <button onClick={resetAndSubscribe} className="text-[10px] text-slate-400 underline uppercase">Réinitialiser</button>
+                <span className="text-xs font-bold text-emerald-600 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  Appareil connecté
+                </span>
+                <button 
+                  onClick={() => setIsSubscribed(false)} 
+                  className="text-[10px] text-slate-400 underline uppercase font-bold"
+                >
+                  Désactiver
+                </button>
             </div>
             <textarea 
               value={customMessage}
               onChange={(e) => setCustomMessage(e.target.value)}
-              placeholder="Écrivez un message ici..."
-              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm h-24 resize-none"
+              placeholder="Message à diffuser..."
+              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm h-24 resize-none focus:ring-2 focus:ring-indigo-100 transition-all"
             />
             <button 
               onClick={sendBroadcast}
               disabled={loading || !customMessage.trim()}
-              className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold active:scale-95 transition-all disabled:opacity-50"
+              className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold active:scale-95 transition-all disabled:opacity-50 shadow-md shadow-indigo-100"
             >
-              Envoyer à tous
+              Diffuser à tous
             </button>
           </div>
         )}

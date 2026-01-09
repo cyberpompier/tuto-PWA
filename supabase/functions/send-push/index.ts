@@ -1,5 +1,3 @@
-// Déploiement : npx supabase functions deploy send-push --no-verify-jwt
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import webpush from 'https://esm.sh/web-push@3.6.0'
@@ -23,14 +21,14 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  console.log(`[Push Server] Nouvelle tentative de broadcast...`);
+  console.log(`[send-push] Début de la diffusion push...`);
 
   try {
     const body = await req.json().catch(() => ({}));
     const { message } = body;
 
     if (!message) {
-      return new Response(JSON.stringify({ error: "Le champ 'message' est vide." }), {
+      return new Response(JSON.stringify({ error: "Message manquant" }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400
       });
@@ -42,26 +40,30 @@ serve(async (req) => {
     const projectUrl = Deno.env.get('SUPABASE_URL');
     
     if (!serviceKey || !projectUrl) {
-      throw new Error("Configuration serveur (env vars) manquante.");
+      console.error("[send-push] Configuration manquante: URL ou Service Key non définis");
+      throw new Error("Config serveur manquante");
     }
 
     const supabase = createClient(projectUrl, serviceKey);
 
-    // Récupérer tous les abonnés
+    // Récupération des abonnements
     const { data: subs, error: dbError } = await supabase
       .from('push_subscriptions')
       .select('*');
     
-    if (dbError) throw dbError;
+    if (dbError) {
+      console.error("[send-push] Erreur DB:", dbError.message);
+      throw dbError;
+    }
 
     if (!subs || subs.length === 0) {
-      return new Response(JSON.stringify({ success: true, sentTo: 0, message: "Aucun abonné en base." }), {
+      return new Response(JSON.stringify({ success: true, sentTo: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
     const payload = JSON.stringify({
-      title: 'Zen PWA',
+      title: 'Zen PWA Gallery',
       body: message,
       url: '/'
     });
@@ -71,22 +73,24 @@ serve(async (req) => {
         await webpush.sendNotification(item.subscription, payload);
         return { success: true };
       } catch (err) {
+        console.warn(`[send-push] Échec pour un appareil:`, err.statusCode);
+        // Nettoyage si l'abonnement est expiré (410) ou introuvable (404)
         if (err.statusCode === 410 || err.statusCode === 404) {
-          await supabase.from('push_subscriptions').delete().eq('user_id', item.user_id);
+          await supabase.from('push_subscriptions').delete().eq('id', item.id);
         }
         return { success: false };
       }
     }));
 
     const count = results.filter(r => r.success).length;
-    console.log(`[Push Server] Succès: ${count}/${subs.length}`);
+    console.log(`[send-push] Diffusion terminée: ${count} succès sur ${subs.length}`);
 
     return new Response(JSON.stringify({ success: true, sentTo: count }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error: any) {
-    console.error(`[Push Server] Erreur critique: ${error.message}`);
+    console.error(`[send-push] Erreur critique:`, error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500

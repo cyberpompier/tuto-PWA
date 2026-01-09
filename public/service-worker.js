@@ -1,12 +1,10 @@
-const CACHE_NAME = 'zen-pwa-v6';
+const CACHE_NAME = 'zen-pwa-v7';
 
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installation v6');
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activation v6');
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
@@ -28,14 +26,20 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+// Gestion robuste des notifications entrantes
 self.addEventListener('push', (event) => {
-  console.log('[SW] Push reçu');
-  let data = { title: 'Zen PWA', body: 'Nouveau message reçu !', url: '/' };
+  console.log('[SW] Notification reçue');
+  
+  let data = { 
+    title: 'Zen PWA', 
+    body: 'Nouveau message reçu !', 
+    url: '/' 
+  };
 
   if (event.data) {
     try {
-      const json = event.data.json();
-      data = { ...data, ...json };
+      const payload = event.data.json();
+      data = { ...data, ...payload };
     } catch (e) {
       data.body = event.data.text();
     }
@@ -48,7 +52,7 @@ self.addEventListener('push', (event) => {
     data: { url: data.url || '/' },
     vibrate: [200, 100, 200],
     actions: [
-      { action: 'open', title: 'Ouvrir l\'application' }
+      { action: 'open', title: 'Voir' }
     ]
   };
 
@@ -59,7 +63,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const urlToOpen = event.notification.data.url || '/';
+  const urlToOpen = new URL(event.notification.data.url || '/', self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
