@@ -21,104 +21,75 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Gestion CORS pour les requêtes preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  console.log(`[Push] Requête reçue: ${req.method}`);
+  console.log(`[Push Server] Nouvelle tentative de broadcast...`);
 
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { message } = body;
 
     if (!message) {
-      console.error("[Push] Erreur: Message vide dans le corps de la requête");
-      throw new Error('Le message est requis pour la notification.');
+      return new Response(JSON.stringify({ error: "Le champ 'message' est vide." }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400
+      });
     }
 
-    // Récupération des secrets d'environnement Supabase
     // @ts-ignore
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     // @ts-ignore
     const projectUrl = Deno.env.get('SUPABASE_URL');
     
     if (!serviceKey || !projectUrl) {
-      console.error("[Push] Erreur: Variables d'environnement manquantes (SERVICE_ROLE_KEY ou URL)");
-      throw new Error("Configuration serveur incomplète.");
+      throw new Error("Configuration serveur (env vars) manquante.");
     }
 
     const supabase = createClient(projectUrl, serviceKey);
 
-    // 1. Récupérer TOUS les abonnements de la base de données
-    console.log("[Push] Récupération des abonnements depuis la table push_subscriptions...");
+    // Récupérer tous les abonnés
     const { data: subs, error: dbError } = await supabase
       .from('push_subscriptions')
       .select('*');
     
-    if (dbError) {
-      console.error("[Push] Erreur DB lors de la lecture:", dbError.message);
-      throw dbError;
-    }
+    if (dbError) throw dbError;
 
     if (!subs || subs.length === 0) {
-      console.log("[Push] Aucun abonné trouvé en base de données.");
-      return new Response(JSON.stringify({ 
-        success: true, 
-        sentTo: 0, 
-        message: "Aucun appareil n'est actuellement abonné." 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200
+      return new Response(JSON.stringify({ success: true, sentTo: 0, message: "Aucun abonné en base." }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    console.log(`[Push] Envoi en cours à ${subs.length} abonnés...`);
-
-    const notificationPayload = JSON.stringify({
-      title: 'Zen PWA Broadcast 🧘',
+    const payload = JSON.stringify({
+      title: 'Zen PWA',
       body: message,
-      url: '/',
-      icon: '/icon-192.png'
+      url: '/'
     });
 
-    // 2. Envoi parallèle des notifications
     const results = await Promise.all(subs.map(async (item) => {
       try {
-        // item.subscription est l'objet JSON généré par le navigateur
-        await webpush.sendNotification(item.subscription, notificationPayload);
-        return { success: true, userId: item.user_id };
+        await webpush.sendNotification(item.subscription, payload);
+        return { success: true };
       } catch (err) {
-        console.error(`[Push] Échec pour l'utilisateur ${item.user_id}:`, err.message);
-        
-        // Nettoyage automatique des abonnements obsolètes (410 Gone / 404 Not Found)
         if (err.statusCode === 410 || err.statusCode === 404) {
-          console.log(`[Push] Nettoyage: Suppression de l'abonnement expiré pour ${item.user_id}`);
           await supabase.from('push_subscriptions').delete().eq('user_id', item.user_id);
         }
-        return { success: false, userId: item.user_id, error: err.message };
+        return { success: false };
       }
     }));
 
-    const successfulCount = results.filter(r => r.success).length;
-    console.log(`[Push] Diffusion terminée. Succès: ${successfulCount}/${subs.length}`);
+    const count = results.filter(r => r.success).length;
+    console.log(`[Push Server] Succès: ${count}/${subs.length}`);
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      sentTo: successfulCount, 
-      total: subs.length 
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
+    return new Response(JSON.stringify({ success: true, sentTo: count }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error: any) {
-    console.error("[Push] Erreur fatale dans la fonction:", error.message);
-    return new Response(JSON.stringify({ 
-      error: error.message || 'Erreur interne du serveur lors de l\'envoi' 
-    }), {
+    console.error(`[Push Server] Erreur critique: ${error.message}`);
+    return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+      status: 500
     });
   }
 })
