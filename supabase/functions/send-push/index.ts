@@ -21,14 +21,18 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  console.log(`[send-push] Début de la diffusion push...`);
+  console.log(`[send-push] Traitement d'une nouvelle requête...`);
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const { message } = body;
+    const requestData = await req.json().catch(() => ({}));
+    
+    // On extrait title, body et url envoyés par le client
+    const { title, body, url } = requestData;
 
-    if (!message) {
-      return new Response(JSON.stringify({ error: "Message manquant" }), {
+    // Validation : le corps du message est obligatoire
+    if (!body) {
+      console.error("[send-push] Erreur: Le champ 'body' est manquant dans la requête");
+      return new Response(JSON.stringify({ error: "Le contenu du message (body) est requis" }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400
       });
@@ -38,8 +42,7 @@ serve(async (req) => {
     const projectUrl = Deno.env.get('SUPABASE_URL');
     
     if (!serviceKey || !projectUrl) {
-      console.error("[send-push] Configuration manquante: URL ou Service Key non définis");
-      throw new Error("Config serveur manquante");
+      throw new Error("Configuration serveur (URL/Key) manquante");
     }
 
     const supabase = createClient(projectUrl, serviceKey);
@@ -49,10 +52,7 @@ serve(async (req) => {
       .from('push_subscriptions')
       .select('*');
     
-    if (dbError) {
-      console.error("[send-push] Erreur DB:", dbError.message);
-      throw dbError;
-    }
+    if (dbError) throw dbError;
 
     if (!subs || subs.length === 0) {
       return new Response(JSON.stringify({ success: true, sentTo: 0 }), {
@@ -60,10 +60,11 @@ serve(async (req) => {
       });
     }
 
+    // Construction du payload avec les données de l'interface
     const payload = JSON.stringify({
-      title: 'Zen PWA Gallery',
-      body: message,
-      url: '/'
+      title: title || 'Zen PWA Gallery',
+      body: body,
+      url: url || '/'
     });
 
     const results = await Promise.all(subs.map(async (item) => {
@@ -71,8 +72,6 @@ serve(async (req) => {
         await webpush.sendNotification(item.subscription, payload);
         return { success: true };
       } catch (err) {
-        console.warn(`[send-push] Échec pour un appareil:`, err.statusCode);
-        // Nettoyage si l'abonnement est expiré (410) ou introuvable (404)
         if (err.statusCode === 410 || err.statusCode === 404) {
           await supabase.from('push_subscriptions').delete().eq('id', item.id);
         }
@@ -81,7 +80,7 @@ serve(async (req) => {
     }));
 
     const count = results.filter(r => r.success).length;
-    console.log(`[send-push] Diffusion terminée: ${count} succès sur ${subs.length}`);
+    console.log(`[send-push] Diffusion réussie vers ${count} appareils`);
 
     return new Response(JSON.stringify({ success: true, sentTo: count }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
