@@ -1,6 +1,6 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import webpush from 'https://esm.sh/web-push@3.6.0'
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+import webpush from "npm:web-push@3.6.6"
 
 const VAPID_KEYS = {
   publicKey: 'BHDClaG8E5f1NTSupTS_xF20XkvJ9sMsjeSYrBHObaDwrXv2h9DkJ_oTdZvOdC8z2tgZtYtKRlVSdml18VCdBr4',
@@ -34,9 +34,7 @@ serve(async (req) => {
       });
     }
 
-    // @ts-ignore
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    // @ts-ignore
     const projectUrl = Deno.env.get('SUPABASE_URL');
     
     if (!serviceKey || !projectUrl) {
