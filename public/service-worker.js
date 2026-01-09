@@ -1,81 +1,42 @@
-const CACHE_NAME = 'zen-pwa-v3';
+const CACHE_NAME = 'zen-pwa-v4';
 
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/public/manifest.json'
+  '/public/manifest.json',
+  '/icon-192.png'
 ];
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting(); // Force l'activation immédiate du nouveau SW
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE).catch(err => {
-        console.warn('Erreur lors du pré-cache des fichiers:', err);
-      });
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) =>
-      Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      )
-    ).then(() => self.clients.claim()) // Prend le contrôle de la page immédiatement
+    Promise.all([
+      caches.keys().then((keys) => Promise.all(keys.map(k => k !== CACHE_NAME && caches.delete(k)))),
+      self.clients.claim()
+    ])
   );
 });
 
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-
-  if (!request.url.startsWith('http')) {
-    return;
-  }
-
+  if (!event.request.url.startsWith('http')) return;
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Mise à jour en arrière-plan (Stale-While-Revalidate)
-        fetch(request).then(networkResponse => {
-            if (networkResponse && networkResponse.status === 200) {
-                const responseToCache = networkResponse.clone();
-                caches.open(CACHE_NAME).then(cache => cache.put(request, responseToCache));
-            }
-        }).catch(() => {});
-        return cachedResponse;
-      }
-
-      return fetch(request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200) {
-          return networkResponse;
-        }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, responseToCache);
-        });
-        return networkResponse;
-      }).catch(() => {
-        // Fallback si offline et pas de cache
-        return new Response("Offline", { status: 503, statusText: "Offline" });
-      });
-    })
+    caches.match(event.request).then((res) => res || fetch(event.request))
   );
 });
 
-// --- Gestion des Notifications Push ---
-
+// --- GESTION PUSH PRODUCTION ---
 self.addEventListener('push', function(event) {
-  console.log('[Service Worker] Push reçu:', event);
-
+  console.log('[SW] Push Received');
+  
   let data = { 
     title: 'Zen PWA', 
-    body: 'Nouvelle notification', 
+    body: 'Nouveau message reçu !', 
     url: '/' 
   };
 
@@ -92,13 +53,11 @@ self.addEventListener('push', function(event) {
     body: data.body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    vibrate: [100, 50, 100],
-    data: {
-      url: data.url
-    },
-    tag: 'zen-pwa-notification', // Remplace les notifs précédentes avec le même tag
-    renotify: true, // Vibre à nouveau même si une notif avec ce tag est déjà visible
-    requireInteraction: true // Sur desktop, empêche la notif de disparaître toute seule
+    tag: 'zen-broadcast',
+    renotify: true,
+    data: { url: data.url || '/' },
+    // Indispensable pour certains navigateurs mobiles
+    actions: [{ action: 'open', title: 'Voir' }]
   };
 
   event.waitUntil(
@@ -107,27 +66,15 @@ self.addEventListener('push', function(event) {
 });
 
 self.addEventListener('notificationclick', function(event) {
-  console.log('[Service Worker] Clic sur notification');
   event.notification.close();
-  
-  const targetUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
+  const urlToOpen = event.notification.data.url;
 
   event.waitUntil(
-    clients.matchAll({
-      type: 'window',
-      includeUncontrolled: true
-    }).then(function(clientList) {
-      // Si l'app est déjà ouverte, on focus la fenêtre
-      for (var i = 0; i < clientList.length; i++) {
-        var client = clientList[i];
-        if (client.url && client.url.includes(targetUrl) && 'focus' in client) {
-          return client.focus();
-        }
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+      for (let client of clientList) {
+        if (client.url === urlToOpen && 'focus' in client) return client.focus();
       }
-      // Sinon, on ouvre une nouvelle fenêtre
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
-      }
+      if (clients.openWindow) return clients.openWindow(urlToOpen);
     })
   );
 });
