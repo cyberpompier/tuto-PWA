@@ -14,12 +14,15 @@ const ASSETS_TO_CACHE = [
 
 /* ---------- INSTALL ---------- */
 self.addEventListener('install', (event) => {
+  console.log('[SW] Install');
   self.skipWaiting();
+
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       for (const asset of ASSETS_TO_CACHE) {
         try {
           await cache.add(asset);
+          console.log('[SW] Cached:', asset);
         } catch (err) {
           console.warn('[SW] Failed to cache:', asset);
         }
@@ -30,11 +33,14 @@ self.addEventListener('install', (event) => {
 
 /* ---------- ACTIVATE ---------- */
 self.addEventListener('activate', (event) => {
+  console.log('[SW] Activate');
+
   event.waitUntil(
     caches.keys().then((cacheNames) =>
       Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
+            console.log('[SW] Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
@@ -73,29 +79,37 @@ self.addEventListener('fetch', (event) => {
 
 /* ---------- PUSH ---------- */
 self.addEventListener('push', (event) => {
-  if (!event.data) return;
+  console.log('[SW] Push received');
 
-  let data = {};
-  try {
-    data = event.data.json();
-  } catch {
-    data = { title: 'Zen PWA', body: event.data.text() };
+  let data = {
+    title: 'Zen PWA',
+    body: 'Nouvelle notification',
+    url: '/'
+  };
+
+  if (event.data) {
+    try {
+      data = { ...data, ...event.data.json() };
+    } catch {
+      data.body = event.data.text();
+    }
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Zen PWA', {
-      body: data.body || 'Nouvelle notification',
+    self.registration.showNotification(data.title, {
+      body: data.body,
       icon: '/icon-192.png',
       badge: '/icon-192.png',
-      data: {
-        url: data.url || '/'
-      }
+      data: { url: data.url }
+    }).then(() => {
+      console.log('[SW] Notification shown');
     })
   );
 });
 
 /* ---------- NOTIFICATION CLICK ---------- */
 self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] Notification click');
   event.notification.close();
 
   const targetUrl = event.notification.data?.url || '/';
@@ -107,9 +121,7 @@ self.addEventListener('notificationclick', (event) => {
           return client.focus();
         }
       }
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
-      }
+      return clients.openWindow(targetUrl);
     })
   );
 });
