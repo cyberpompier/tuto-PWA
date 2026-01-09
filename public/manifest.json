@@ -1,6 +1,6 @@
 {
   "name": "Zen PWA Gallery",
-  "short_name": "ZenPWA",
+  "short_name": "Zen PWA",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
