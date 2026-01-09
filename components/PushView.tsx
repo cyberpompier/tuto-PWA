@@ -39,8 +39,9 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   useEffect(() => {
     if ('Notification' in window) {
       setPermission(Notification.permission);
+      // Vérifier si le service worker est prêt et si on a une souscription
+      checkSubscription();
     }
-    checkSubscription();
   }, []);
 
   const getUserId = () => {
@@ -53,12 +54,18 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   };
 
   const checkSubscription = async () => {
-    if ('serviceWorker' in navigator) {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      if (subscription) {
-        setIsSubscribed(true);
-      }
+    try {
+        if ('serviceWorker' in navigator) {
+          const registration = await navigator.serviceWorker.ready;
+          const subscription = await registration.pushManager.getSubscription();
+          if (subscription) {
+            setIsSubscribed(true);
+          } else {
+            setIsSubscribed(false);
+          }
+        }
+    } catch (e) {
+        console.error("Erreur checkSubscription", e);
     }
   };
 
@@ -72,13 +79,15 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       setPermission(perm);
 
       if (perm !== 'granted') {
-        throw new Error('Permission de notification refusée');
+        throw new Error('Permission de notification refusée. Veuillez l\'activer dans les paramètres du navigateur.');
       }
 
       // 2. S'inscrire au Push Manager
+      if (!('serviceWorker' in navigator)) throw new Error("Service Worker non supporté");
+      
       const registration = await navigator.serviceWorker.ready;
       
-      // On se désabonne d'abord pour être sûr d'avoir des clés fraîches si besoin
+      // On se désabonne d'abord pour forcer le rafraîchissement
       const existingSub = await registration.pushManager.getSubscription();
       if (existingSub) {
         await existingSub.unsubscribe();
@@ -93,6 +102,8 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       const subJson = subscription.toJSON();
       const userId = getUserId();
 
+      console.log("Saving subscription for:", userId);
+
       const { error } = await supabase
         .from('push_subscriptions')
         .upsert({
@@ -103,13 +114,17 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
           subscription: subJson
         }, { onConflict: 'user_id' });
 
-      if (error) throw error;
+      if (error) {
+          console.error("Erreur Supabase:", error);
+          throw new Error("Erreur lors de la sauvegarde sur le serveur.");
+      }
 
       setIsSubscribed(true);
-      setMessage("✅ Abonnement activé !");
+      setMessage("✅ Appareil enregistré pour les notifications !");
     } catch (err: any) {
       console.error('Erreur inscription:', err);
       setMessage(`❌ Erreur: ${err.message || 'Impossible de s\'abonner'}`);
+      setIsSubscribed(false);
     } finally {
       setLoading(false);
     }
@@ -129,30 +144,21 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
           'Authorization': `Bearer ${SUPABASE_KEY}`
         },
         body: JSON.stringify({
-          // On envoie toujours l'ID au cas où, mais le backend va maintenant broadcaster
-          user_id: getUserId(),
           message: customMessage
         })
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        
-        // Si l'abonnement n'est pas trouvé dans la DB mais que le navigateur dit qu'on est inscrit
-        if (response.status === 404 || (errorData.error && errorData.error.includes('Subscription not found'))) {
-             setIsSubscribed(false); // Force l'interface à redemander l'inscription
-             throw new Error("Abonnement introuvable. Veuillez vous réabonner.");
-        }
-        
-        throw new Error(errorData.error || `Erreur serveur: ${response.status}`);
+        throw new Error(data.error || `Erreur serveur (${response.status})`);
       }
       
-      const result = await response.json();
-      setMessage(`🚀 Notification envoyée à ${result.sentTo} appareil(s) !`);
+      setMessage(`🚀 Envoyé ! Reçu par ${data.sentTo} appareil(s).`);
       setCustomMessage("");
     } catch (err: any) {
       console.error("Erreur d'envoi:", err);
-      setMessage(`❌ ${err.message}`);
+      setMessage(`❌ Échec de l'envoi: ${err.message}`);
     } finally {
       setSending(false);
     }
@@ -160,14 +166,26 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
 
   const testLocalNotification = () => {
     if (Notification.permission === 'granted') {
-        new Notification("Test Local", {
-            body: "Si vous voyez ceci, votre appareil peut afficher les notifications.",
-            icon: "/icon-192.png"
-        });
-        setMessage("✅ Notification locale envoyée");
+        try {
+            const notif = new Notification("Test Local", {
+                body: "Le système de notification local fonctionne.",
+                icon: "/icon-192.png"
+            });
+            notif.onclick = () => { window.focus(); notif.close(); };
+            setMessage("✅ Notification locale déclenchée");
+        } catch (e) {
+            // Fallback pour Android si new Notification() échoue (rare mais possible via SW)
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(reg => {
+                    reg.showNotification("Test Local (SW)", {
+                        body: "Via Service Worker",
+                        icon: "/icon-192.png"
+                    });
+                });
+            }
+        }
     } else {
-        setMessage("⚠️ Permission non accordée pour le test local");
-        Notification.requestPermission();
+        setMessage("⚠️ Permission requise. Cliquez sur 'Activer'.");
     }
   };
 
@@ -188,10 +206,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
 
       <div className="max-w-md mx-auto w-full">
         <p className="text-slate-600 leading-relaxed text-lg mb-6">
-          {isSubscribed 
-            ? "Appareil connecté. Envoyez une notification à TOUS les utilisateurs."
-            : "Activez les notifications pour recevoir les alertes de tout le monde."
-          }
+          Diffusez un message à <strong>tous</strong> les utilisateurs connectés.
         </p>
 
         {message && (
@@ -217,19 +232,19 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                         </span>
-                        Service Actif
+                        Abonné
                     </div>
                     <button onClick={testLocalNotification} className="text-xs text-indigo-600 hover:underline">
-                        Test Local
+                        Tester Localement
                     </button>
                 </div>
                 
                 <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-500 uppercase">Message Broadcast (Tout le monde)</label>
+                    <label className="text-xs font-semibold text-slate-500 uppercase">Message à tous (Broadcast)</label>
                     <textarea 
                         value={customMessage}
                         onChange={(e) => setCustomMessage(e.target.value)}
-                        placeholder="Ex: Alerte générale..."
+                        placeholder="Ex: Bonjour à tous !"
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm resize-none h-24"
                     />
                 </div>
@@ -243,14 +258,14 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                       {sending ? (
                         <>
                             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            Diffusion...
+                            Envoi...
                         </>
                       ) : (
                         <>
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                                 <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
                             </svg>
-                            Envoyer à tous
+                            Diffuser à tous
                         </>
                       )}
                     </button>
@@ -258,7 +273,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                     <button
                         onClick={subscribeToPush} 
                         className="px-3 py-2 border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-50"
-                        title="Forcer la resynchronisation"
+                        title="Ré-inscrire cet appareil"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
                             <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.31h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z" clipRule="evenodd" />
