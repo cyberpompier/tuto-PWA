@@ -10,19 +10,13 @@ export const ICONS = {
   ),
   Globe: ({ active }: { active: boolean }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
     </svg>
   ),
   User: ({ active }: { active: boolean }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-    </svg>
-  ),
-  MapPin: ({ active }: { active: boolean }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
     </svg>
   ),
   Bell: ({ active }: { active: boolean }) => (
@@ -47,6 +41,11 @@ export const MENU_ITEMS: NavigationItem[] = [
     id: PageId.PUSH,
     label: "Notif",
     icon: (active) => <ICONS.Bell active={active} />
+  },
+  {
+    id: PageId.PROFILE,
+    label: "Profil",
+    icon: (active) => <ICONS.User active={active} />
   }
 ];
 
@@ -60,10 +59,10 @@ export const PAGES: Record<PageId, PageData> = {
   },
   [PageId.EXPLORE]: {
     id: PageId.EXPLORE,
-    title: "Galerie",
-    subtitle: "Découvrez le monde",
+    title: "Galerie Zen",
+    subtitle: "Inspiration visuelle",
     imageUrl: "https://picsum.photos/seed/arch2/800/1000",
-    description: "Parcourez des images haute définition. Le défilement est fluide et indépendant du header et du footer."
+    description: "Une collection d'images sélectionnées pour leur sérénité."
   },
   [PageId.GEO]: {
     id: PageId.GEO,
@@ -81,9 +80,9 @@ export const PAGES: Record<PageId, PageData> = {
   },
   [PageId.PROFILE]: {
     id: PageId.PROFILE,
-    title: "Profil",
-    subtitle: "Espace personnel",
+    title: "Mon Profil",
+    subtitle: "Gérez vos préférences",
     imageUrl: "https://picsum.photos/seed/tech3/800/1000",
-    description: "Gérez vos préférences ici. L'état de l'application est préservé lors de la navigation entre les onglets."
+    description: "Espace personnel pour configurer votre expérience Zen PWA."
   }
 };

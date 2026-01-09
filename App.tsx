@@ -4,13 +4,14 @@ import { Footer } from './components/Footer';
 import { PageView } from './components/PageView';
 import { GeoView } from './components/GeoView';
 import { PushView } from './components/PushView';
+import { ExploreView } from './components/ExploreView';
+import { ProfileView } from './components/ProfileView';
 import { PageId } from './types';
 import { PAGES } from './constants';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<PageId>(PageId.HOME);
 
-  // Router simple pour sélectionner la vue
   const renderPage = () => {
     const pageData = PAGES[currentPage];
     
@@ -19,6 +20,10 @@ export default function App() {
         return <GeoView data={pageData} />;
       case PageId.PUSH:
         return <PushView data={pageData} />;
+      case PageId.EXPLORE:
+        return <ExploreView data={pageData} />;
+      case PageId.PROFILE:
+        return <ProfileView data={pageData} />;
       default:
         return <PageView data={pageData} />;
     }
@@ -26,15 +31,12 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
-      {/* Fixed Header */}
       <Header title={PAGES[currentPage].title} />
 
-      {/* Scrollable Main Content */}
       <main className="flex-grow pt-16 pb-20 overflow-y-auto overflow-x-hidden scroll-smooth w-full">
         {renderPage()}
       </main>
 
-      {/* Fixed Footer */}
       <Footer activePage={currentPage} onNavigate={setCurrentPage} />
     </div>
   );
