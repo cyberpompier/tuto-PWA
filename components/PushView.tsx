@@ -41,16 +41,14 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   }, []);
 
   const fetchUsers = async () => {
-    // Tentative de récupération depuis appepi_users
+    // Utilisation de la nouvelle table push_pwa_users
     const { data: userData, error } = await supabase
-      .from('appepi_users')
+      .from('push_pwa_users')
       .select('id, full_name')
       .order('full_name');
     
-    if (!error && userData && userData.length > 0) {
+    if (!error && userData) {
       setUsers(userData);
-    } else {
-      console.log("Aucun utilisateur trouvé dans appepi_users ou erreur:", error);
     }
   };
 
@@ -134,10 +132,10 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   return (
     <div className="px-6 py-8 flex flex-col items-center pb-32 animate-fade-in bg-slate-50 min-h-full">
       
-      {/* SECTION APERÇU (PREVIEW) */}
+      {/* APERÇU DYNAMIQUE */}
       <div className="w-full max-w-md mb-8">
         <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block px-1 tracking-wider">Aperçu du rendu</label>
-        <div className="bg-white/80 backdrop-blur-md border border-white shadow-xl rounded-2xl p-4 flex items-start space-x-4 transition-all duration-300">
+        <div className="bg-white/80 backdrop-blur-md border border-white shadow-xl rounded-2xl p-4 flex items-start space-x-4">
           <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-inner">
             <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -175,7 +173,6 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
               </h3>
               
               <div className="space-y-4">
-                {/* Sélecteur de destinataire */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase px-1">Destinataire</label>
                   <select 
@@ -184,17 +181,10 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                     className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all appearance-none cursor-pointer"
                   >
                     <option value="all">📢 Tous les utilisateurs</option>
-                    {users.length > 0 ? (
-                      users.map(u => (
-                        <option key={u.id} value={u.id}>👤 {u.full_name}</option>
-                      ))
-                    ) : (
-                      <option disabled className="text-slate-400 italic">Aucun autre utilisateur trouvé</option>
-                    )}
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>👤 {u.full_name}</option>
+                    ))}
                   </select>
-                  {users.length === 0 && (
-                    <p className="text-[10px] text-slate-400 mt-1 px-1">Seul le mode diffusion globale est disponible car aucun utilisateur n'est enregistré.</p>
-                  )}
                 </div>
 
                 <div className="space-y-1">
