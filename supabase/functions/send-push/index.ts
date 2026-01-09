@@ -21,18 +21,12 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  console.log(`[send-push] Traitement d'une nouvelle requête...`);
-
   try {
     const requestData = await req.json().catch(() => ({}));
-    
-    // On extrait title, body et url envoyés par le client
-    const { title, body, url } = requestData;
+    const { title, body, url, targetUserId } = requestData;
 
-    // Validation : le corps du message est obligatoire
     if (!body) {
-      console.error("[send-push] Erreur: Le champ 'body' est manquant dans la requête");
-      return new Response(JSON.stringify({ error: "Le contenu du message (body) est requis" }), {
+      return new Response(JSON.stringify({ error: "Le contenu du message est requis" }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400
       });
@@ -40,18 +34,20 @@ serve(async (req) => {
 
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const projectUrl = Deno.env.get('SUPABASE_URL');
+    const supabase = createClient(projectUrl!, serviceKey!);
+
+    // Construction de la requête pour les abonnements
+    let query = supabase.from('push_subscriptions').select('*');
     
-    if (!serviceKey || !projectUrl) {
-      throw new Error("Configuration serveur (URL/Key) manquante");
+    // Si un utilisateur spécifique est ciblé (et que ce n'est pas 'all')
+    if (targetUserId && targetUserId !== 'all') {
+      console.log(`[send-push] Ciblage de l'utilisateur : ${targetUserId}`);
+      query = query.eq('user_id', targetUserId);
+    } else {
+      console.log(`[send-push] Diffusion générale (Broadcast)`);
     }
 
-    const supabase = createClient(projectUrl, serviceKey);
-
-    // Récupération des abonnements
-    const { data: subs, error: dbError } = await supabase
-      .from('push_subscriptions')
-      .select('*');
-    
+    const { data: subs, error: dbError } = await query;
     if (dbError) throw dbError;
 
     if (!subs || subs.length === 0) {
@@ -60,10 +56,9 @@ serve(async (req) => {
       });
     }
 
-    // Construction du payload avec les données de l'interface
     const payload = JSON.stringify({
       title: title || 'Zen PWA Gallery',
-      body: body,
+      body,
       url: url || '/'
     });
 
@@ -72,6 +67,7 @@ serve(async (req) => {
         await webpush.sendNotification(item.subscription, payload);
         return { success: true };
       } catch (err) {
+        // Suppression si l'abonnement a expiré
         if (err.statusCode === 410 || err.statusCode === 404) {
           await supabase.from('push_subscriptions').delete().eq('id', item.id);
         }
@@ -80,14 +76,12 @@ serve(async (req) => {
     }));
 
     const count = results.filter(r => r.success).length;
-    console.log(`[send-push] Diffusion réussie vers ${count} appareils`);
-
     return new Response(JSON.stringify({ success: true, sentTo: count }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error: any) {
-    console.error(`[send-push] Erreur critique:`, error.message);
+    console.error(`[send-push] Erreur:`, error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500
