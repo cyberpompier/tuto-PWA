@@ -41,13 +41,16 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   }, []);
 
   const fetchUsers = async () => {
+    // Tentative de récupération depuis appepi_users
     const { data: userData, error } = await supabase
       .from('appepi_users')
       .select('id, full_name')
       .order('full_name');
     
-    if (!error && userData) {
+    if (!error && userData && userData.length > 0) {
       setUsers(userData);
+    } else {
+      console.log("Aucun utilisateur trouvé dans appepi_users ou erreur:", error);
     }
   };
 
@@ -75,7 +78,6 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
         });
         
         const subJson = sub.toJSON();
-        // On récupère l'ID utilisateur actuel ou on en crée un
         let userId = localStorage.getItem('zen_pwa_user_id') || crypto.randomUUID();
         localStorage.setItem('zen_pwa_user_id', userId);
 
@@ -98,7 +100,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
     }
   };
 
-  const sendBroadcast = async () => {
+  const sendPush = async () => {
     if (!pushContent.body.trim()) return;
     setLoading(true);
     setStatus({ msg: "Envoi en cours...", type: 'info' });
@@ -119,7 +121,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       setStatus({ 
         msg: pushContent.targetUserId === 'all' 
           ? `🚀 Envoyé à ${resData.sentTo} appareils.` 
-          : `🚀 Envoyé à l'utilisateur ciblé.`, 
+          : `🚀 Envoyé avec succès.`, 
         type: 'success' 
       });
     } catch (err: any) {
@@ -130,18 +132,32 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   };
 
   return (
-    <div className="px-6 py-8 flex flex-col items-center pb-32 animate-fade-in">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden mb-8 aspect-[16/9] relative">
-         <img src={data.imageUrl} className="w-full h-full object-cover" alt="Focus" />
-         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-6 flex flex-col justify-end">
-            <h2 className="text-white text-2xl font-bold">Ciblage & Diffusion</h2>
-            <p className="text-white/70 text-sm">Envoyez des messages personnalisés</p>
-         </div>
+    <div className="px-6 py-8 flex flex-col items-center pb-32 animate-fade-in bg-slate-50 min-h-full">
+      
+      {/* SECTION APERÇU (PREVIEW) */}
+      <div className="w-full max-w-md mb-8">
+        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block px-1 tracking-wider">Aperçu du rendu</label>
+        <div className="bg-white/80 backdrop-blur-md border border-white shadow-xl rounded-2xl p-4 flex items-start space-x-4 transition-all duration-300">
+          <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-inner">
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </div>
+          <div className="flex-grow min-w-0">
+            <div className="flex justify-between items-center mb-0.5">
+              <h4 className="font-bold text-slate-800 text-sm truncate">{pushContent.title || "Titre"}</h4>
+              <span className="text-[10px] text-slate-400">Maintenant</span>
+            </div>
+            <p className="text-sm text-slate-600 line-clamp-2 leading-tight">
+              {pushContent.body || "Le contenu de votre message apparaîtra ici..."}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="w-full max-w-md space-y-6">
         {status && (
-          <div className={`p-4 rounded-2xl text-sm font-semibold border ${
+          <div className={`p-4 rounded-2xl text-sm font-semibold border animate-bounce-short ${
             status.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' : 
             status.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 
             'bg-indigo-50 text-indigo-700 border-indigo-100'
@@ -153,62 +169,93 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
         {isSubscribed && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
-              <h3 className="font-bold text-slate-800">Paramètres d'envoi</h3>
+              <h3 className="font-bold text-slate-800 flex items-center">
+                <span className="w-1.5 h-6 bg-indigo-600 rounded-full mr-2"></span>
+                Rédaction du message
+              </h3>
               
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {/* Sélecteur de destinataire */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase px-1">Destinataire</label>
                   <select 
                     value={pushContent.targetUserId}
                     onChange={(e) => setPushContent({...pushContent, targetUserId: e.target.value})}
-                    className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 transition-all"
+                    className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all appearance-none cursor-pointer"
                   >
-                    <option value="all">Tous les utilisateurs</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>{u.full_name}</option>
-                    ))}
+                    <option value="all">📢 Tous les utilisateurs</option>
+                    {users.length > 0 ? (
+                      users.map(u => (
+                        <option key={u.id} value={u.id}>👤 {u.full_name}</option>
+                      ))
+                    ) : (
+                      <option disabled className="text-slate-400 italic">Aucun autre utilisateur trouvé</option>
+                    )}
                   </select>
+                  {users.length === 0 && (
+                    <p className="text-[10px] text-slate-400 mt-1 px-1">Seul le mode diffusion globale est disponible car aucun utilisateur n'est enregistré.</p>
+                  )}
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase px-1">Titre</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase px-1">Titre de l'alerte</label>
                   <input 
                     type="text"
                     value={pushContent.title}
                     onChange={(e) => setPushContent({...pushContent, title: e.target.value})}
-                    className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm font-semibold"
+                    placeholder="Ex: Alerte Matériel"
+                    className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm font-semibold focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase px-1">Message</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase px-1">Contenu du message</label>
                   <textarea 
                     value={pushContent.body}
                     onChange={(e) => setPushContent({...pushContent, body: e.target.value})}
-                    className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm h-24 resize-none"
+                    placeholder="Ecrivez votre message ici..."
+                    className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm h-28 resize-none focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all"
                   />
                 </div>
               </div>
             </div>
 
             <button 
-              onClick={sendBroadcast}
+              onClick={sendPush}
               disabled={loading}
-              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-all disabled:opacity-50"
+              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg shadow-indigo-100 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center space-x-2"
             >
-              {loading ? "Envoi..." : pushContent.targetUserId === 'all' ? "Envoyer à tous" : "Envoyer à l'utilisateur"}
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  <span>{pushContent.targetUserId === 'all' ? "Diffuser à tous" : "Envoyer à l'utilisateur"}</span>
+                </>
+              )}
             </button>
           </div>
         )}
 
         {!isSubscribed && (
-          <button 
-            onClick={handleSubscribeClick}
-            className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold"
-          >
-            S'abonner pour tester
-          </button>
+          <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm text-center space-y-4">
+            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+               <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+               </svg>
+            </div>
+            <h3 className="font-bold text-lg text-slate-800">Prêt à tester ?</h3>
+            <p className="text-sm text-slate-500">Abonnez cet appareil pour pouvoir recevoir les notifications de test que vous allez rédiger.</p>
+            <button 
+              onClick={handleSubscribeClick}
+              disabled={loading}
+              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold active:scale-95 transition-all"
+            >
+              {loading ? "Chargement..." : "S'abonner sur cet appareil"}
+            </button>
+          </div>
         )}
       </div>
     </div>
