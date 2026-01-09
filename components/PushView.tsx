@@ -27,6 +27,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{msg: string, type: 'error' | 'success' | 'info'} | null>(null);
   const [users, setUsers] = useState<{id: string, full_name: string}[]>([]);
+  const [selectedMyIdentity, setSelectedMyIdentity] = useState<string>("");
   
   const [pushContent, setPushContent] = useState({
     title: "Zen PWA Gallery",
@@ -41,7 +42,6 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   }, []);
 
   const fetchUsers = async () => {
-    // Utilisation de la nouvelle table push_pwa_users
     const { data: userData, error } = await supabase
       .from('push_pwa_users')
       .select('id, full_name')
@@ -58,29 +58,67 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
         setIsSubscribed(!!sub);
+        
+        // Si on est abonné, on récupère l'identité stockée
+        if (sub) {
+          const storedId = localStorage.getItem('zen_pwa_user_id');
+          if (storedId) setSelectedMyIdentity(storedId);
+        }
       } catch (e) {
         console.error("Erreur checkSubscription:", e);
       }
     }
   };
 
+  const handleUnsubscribe = async () => {
+    setLoading(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await sub.unsubscribe();
+        const userId = localStorage.getItem('zen_pwa_user_id');
+        if (userId) {
+          await supabase.from('push_subscriptions').delete().eq('user_id', userId);
+        }
+      }
+      localStorage.removeItem('zen_pwa_user_id');
+      setIsSubscribed(false);
+      setSelectedMyIdentity("");
+      setStatus({ msg: "Abonnement réinitialisé sur cet appareil.", type: 'info' });
+    } catch (err: any) {
+      setStatus({ msg: err.message, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubscribeClick = async () => {
+    if (!selectedMyIdentity) {
+      setStatus({ msg: "Veuillez d'abord choisir votre identité.", type: 'error' });
+      return;
+    }
+
     setLoading(true);
     try {
       const perm = await Notification.requestPermission();
       if (perm === 'granted') {
         const reg = await navigator.serviceWorker.ready;
+        
+        // On s'assure de nettoyer tout ancien abonnement résiduel
+        const oldSub = await reg.pushManager.getSubscription();
+        if (oldSub) await oldSub.unsubscribe();
+
         let sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
         });
         
         const subJson = sub.toJSON();
-        let userId = localStorage.getItem('zen_pwa_user_id') || crypto.randomUUID();
-        localStorage.setItem('zen_pwa_user_id', userId);
+        localStorage.setItem('zen_pwa_user_id', selectedMyIdentity);
 
         const { error } = await supabase.from('push_subscriptions').upsert({
-          user_id: userId,
+          user_id: selectedMyIdentity,
           endpoint: subJson.endpoint,
           p256dh: subJson.keys?.p256dh,
           auth: subJson.keys?.auth,
@@ -89,7 +127,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
 
         if (error) throw error;
         setIsSubscribed(true);
-        setStatus({ msg: "Notifications activées !", type: 'success' });
+        setStatus({ msg: "Notifications liées avec succès !", type: 'success' });
       }
     } catch (err: any) {
       setStatus({ msg: err.message, type: 'error' });
@@ -119,7 +157,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       setStatus({ 
         msg: pushContent.targetUserId === 'all' 
           ? `🚀 Envoyé à ${resData.sentTo} appareils.` 
-          : `🚀 Envoyé avec succès.`, 
+          : `🚀 Envoyé avec succès (${resData.sentTo} reçu).`, 
         type: 'success' 
       });
     } catch (err: any) {
@@ -132,7 +170,6 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   return (
     <div className="px-6 py-8 flex flex-col items-center pb-32 animate-fade-in bg-slate-50 min-h-full">
       
-      {/* APERÇU DYNAMIQUE */}
       <div className="w-full max-w-md mb-8">
         <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block px-1 tracking-wider">Aperçu du rendu</label>
         <div className="bg-white/80 backdrop-blur-md border border-white shadow-xl rounded-2xl p-4 flex items-start space-x-4">
@@ -226,22 +263,45 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                 </>
               )}
             </button>
+
+            <button 
+              onClick={handleUnsubscribe}
+              disabled={loading}
+              className="w-full py-2 text-slate-400 text-xs font-medium hover:text-red-500 transition-colors"
+            >
+              Réinitialiser l'abonnement sur cet appareil
+            </button>
           </div>
         )}
 
         {!isSubscribed && (
-          <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm text-center space-y-4">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-               <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm text-center space-y-6">
+            <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-2">
+               <svg className="w-8 h-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                </svg>
             </div>
-            <h3 className="font-bold text-lg text-slate-800">Prêt à tester ?</h3>
-            <p className="text-sm text-slate-500">Abonnez cet appareil pour pouvoir recevoir les notifications de test que vous allez rédiger.</p>
+            
+            <div className="space-y-2">
+              <h3 className="font-bold text-lg text-slate-800">Qui êtes-vous ?</h3>
+              <p className="text-sm text-slate-500">Choisissez votre profil pour lier cet appareil à votre compte.</p>
+              
+              <select 
+                value={selectedMyIdentity}
+                onChange={(e) => setSelectedMyIdentity(e.target.value)}
+                className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-200 focus:bg-white transition-all appearance-none cursor-pointer"
+              >
+                <option value="">-- Sélectionnez votre nom --</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.full_name}</option>
+                ))}
+              </select>
+            </div>
+
             <button 
               onClick={handleSubscribeClick}
-              disabled={loading}
-              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold active:scale-95 transition-all"
+              disabled={loading || !selectedMyIdentity}
+              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold active:scale-95 transition-all disabled:opacity-30"
             >
               {loading ? "Chargement..." : "S'abonner sur cet appareil"}
             </button>
