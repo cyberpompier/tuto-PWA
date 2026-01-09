@@ -56,7 +56,7 @@ export const PAGES: Record<PageId, PageData> = {
     title: "Bienvenue",
     subtitle: "Votre sanctuaire numérique",
     imageUrl: "https://picsum.photos/seed/nature1/800/1000",
-    description: "Explorez une interface fluide conçue pour être installée. Cette page d'accueil démontre la structure PWA avec une navigation fixe."
+    description: "Explorez une interface FLUIDE conçue pour être installée. Cette page d'accueil démontre la structure PWA avec une navigation fixe."
   },
   [PageId.EXPLORE]: {
     id: PageId.EXPLORE,

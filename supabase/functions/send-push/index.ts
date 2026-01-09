@@ -33,28 +33,29 @@ serve(async (req) => {
   }
 
   try {
-    const { user_id, message } = await req.json()
+    const { message } = await req.json()
 
-    if (!user_id || !message) {
-      throw new Error('user_id and message are required')
+    if (!message) {
+      throw new Error('message is required')
     }
 
     // 1. Initialiser Supabase Client
-    // Note: Pour une edge function, on utilise souvent le Service Role Key pour contourner RLS si besoin, 
-    // mais ici l'anon key suffit si les politiques RLS permettent la lecture.
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-    // 2. Récupérer la souscription de l'utilisateur
-    const { data: subscriptionData, error: dbError } = await supabase
+    // 2. Récupérer TOUTES les souscriptions (Broadcast)
+    // On ne filtre plus par user_id
+    const { data: subscriptions, error: dbError } = await supabase
       .from('push_subscriptions')
-      .select('subscription')
-      .eq('user_id', user_id)
-      .single()
+      .select('user_id, subscription')
 
-    if (dbError || !subscriptionData) {
-      return new Response(JSON.stringify({ error: 'Subscription not found' }), {
+    if (dbError) {
+        throw new Error(`DB Error: ${dbError.message}`);
+    }
+
+    if (!subscriptions || subscriptions.length === 0) {
+      return new Response(JSON.stringify({ message: 'No subscriptions found' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 404,
+        status: 200,
       })
     }
 
@@ -65,13 +66,32 @@ serve(async (req) => {
       url: '/push'
     })
 
-    // 4. Envoyer la notification via Web Push Protocol
-    await webpush.sendNotification(
-      subscriptionData.subscription,
-      payload
-    )
+    // 4. Envoyer à tout le monde
+    const results = await Promise.allSettled(
+        subscriptions.map(async (sub) => {
+            try {
+                await webpush.sendNotification(sub.subscription, payload);
+                return { status: 'fulfilled', userId: sub.user_id };
+            } catch (error) {
+                // Gestion basique des abonnements invalides (410 Gone)
+                if (error.statusCode === 410 || error.statusCode === 404) {
+                    console.log(`Subscription expired for user ${sub.user_id}, deleting...`);
+                    await supabase.from('push_subscriptions').delete().eq('user_id', sub.user_id);
+                }
+                console.error(`Error sending to user ${sub.user_id}:`, error);
+                throw error;
+            }
+        })
+    );
 
-    return new Response(JSON.stringify({ success: true }), {
+    const successCount = results.filter(r => r.status === 'fulfilled').length;
+    const failureCount = results.filter(r => r.status === 'rejected').length;
+
+    return new Response(JSON.stringify({ 
+        success: true, 
+        sentTo: successCount, 
+        failed: failureCount 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })

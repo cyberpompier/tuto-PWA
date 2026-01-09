@@ -129,6 +129,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
           'Authorization': `Bearer ${SUPABASE_KEY}`
         },
         body: JSON.stringify({
+          // On envoie toujours l'ID au cas où, mais le backend va maintenant broadcaster
           user_id: getUserId(),
           message: customMessage
         })
@@ -140,13 +141,14 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
         // Si l'abonnement n'est pas trouvé dans la DB mais que le navigateur dit qu'on est inscrit
         if (response.status === 404 || (errorData.error && errorData.error.includes('Subscription not found'))) {
              setIsSubscribed(false); // Force l'interface à redemander l'inscription
-             throw new Error("Abonnement introuvable sur le serveur. Veuillez réactiver les notifications.");
+             throw new Error("Abonnement introuvable. Veuillez vous réabonner.");
         }
         
         throw new Error(errorData.error || `Erreur serveur: ${response.status}`);
       }
       
-      setMessage("🚀 Notification envoyée avec succès !");
+      const result = await response.json();
+      setMessage(`🚀 Notification envoyée à ${result.sentTo} appareil(s) !`);
       setCustomMessage("");
     } catch (err: any) {
       console.error("Erreur d'envoi:", err);
@@ -187,8 +189,8 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       <div className="max-w-md mx-auto w-full">
         <p className="text-slate-600 leading-relaxed text-lg mb-6">
           {isSubscribed 
-            ? "Appareil connecté. Envoyez une notification réelle via le cloud."
-            : "Activez les notifications pour recevoir des alertes même application fermée."
+            ? "Appareil connecté. Envoyez une notification à TOUS les utilisateurs."
+            : "Activez les notifications pour recevoir les alertes de tout le monde."
           }
         </p>
 
@@ -223,11 +225,11 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                 </div>
                 
                 <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-500 uppercase">Message Push (Via Serveur)</label>
+                    <label className="text-xs font-semibold text-slate-500 uppercase">Message Broadcast (Tout le monde)</label>
                     <textarea 
                         value={customMessage}
                         onChange={(e) => setCustomMessage(e.target.value)}
-                        placeholder="Ex: Alerte météo importante..."
+                        placeholder="Ex: Alerte générale..."
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm resize-none h-24"
                     />
                 </div>
@@ -241,14 +243,14 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                       {sending ? (
                         <>
                             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            Envoi...
+                            Diffusion...
                         </>
                       ) : (
                         <>
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                                 <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
                             </svg>
-                            Envoyer
+                            Envoyer à tous
                         </>
                       )}
                     </button>
