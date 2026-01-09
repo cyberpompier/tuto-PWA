@@ -27,41 +27,75 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{msg: string, type: 'error' | 'success' | 'info'} | null>(null);
   const [customMessage, setCustomMessage] = useState("");
+  const [permissionState, setPermissionState] = useState<NotificationPermission>(typeof Notification !== 'undefined' ? Notification.permission : 'default');
 
   useEffect(() => {
     checkSubscription();
   }, []);
 
   const checkSubscription = async () => {
-    if ('serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      setIsSubscribed(!!sub);
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        setIsSubscribed(!!sub);
+        setPermissionState(Notification.permission);
+      } catch (e) {
+        console.error("Erreur checkSubscription:", e);
+      }
+    }
+  };
+
+  const resetAndSubscribe = async () => {
+    setLoading(true);
+    setStatus({ msg: "Nettoyage du service...", type: 'info' });
+    
+    try {
+      // 1. Désinscription forcée du SW pour réinitialiser l'état
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (let registration of registrations) {
+          await registration.unregister();
+        }
+        // Re-enregistrement
+        await navigator.serviceWorker.register('/service-worker.js');
+      }
+
+      // 2. Demande explicite de permission
+      const perm = await Notification.requestPermission();
+      setPermissionState(perm);
+      
+      if (perm === 'denied') {
+        throw new Error("Vous avez bloqué les notifications. Allez dans les paramètres de votre navigateur pour les réactiver.");
+      }
+
+      if (perm === 'granted') {
+        await subscribe();
+      }
+    } catch (err: any) {
+      setStatus({ msg: `❌ ${err.message}`, type: 'error' });
+    } finally {
+      setLoading(false);
     }
   };
 
   const subscribe = async () => {
     setLoading(true);
-    setStatus({ msg: "Activation du service...", type: 'info' });
+    setStatus({ msg: "Génération de l'abonnement push...", type: 'info' });
 
     try {
-      const perm = await Notification.requestPermission();
-      if (perm !== 'granted') throw new Error("Permission de notification refusée.");
-
       const reg = await navigator.serviceWorker.ready;
+      
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       });
 
       const subJson = sub.toJSON();
-      let userId = localStorage.getItem('zen_pwa_user_id');
-      if (!userId) {
-        userId = crypto.randomUUID();
-        localStorage.setItem('zen_pwa_user_id', userId);
-      }
+      let userId = localStorage.getItem('zen_pwa_user_id') || crypto.randomUUID();
+      localStorage.setItem('zen_pwa_user_id', userId);
 
-      // Enregistrement Table Supabase
+      // Envoi à Supabase
       const { error } = await supabase
         .from('push_subscriptions')
         .upsert({
@@ -72,10 +106,10 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
           subscription: subJson
         });
 
-      if (error) throw new Error(`Erreur Base de données: ${error.message}`);
+      if (error) throw new Error(`Base de données: ${error.message}`);
 
       setIsSubscribed(true);
-      setStatus({ msg: "✅ Notifications activées !", type: 'success' });
+      setStatus({ msg: "✅ Notifications prêtes !", type: 'success' });
     } catch (err: any) {
       setStatus({ msg: `❌ ${err.message}`, type: 'error' });
     } finally {
@@ -97,9 +131,9 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       });
 
       const resData = await response.json();
-      if (!response.ok) throw new Error(resData.error || "Erreur serveur.");
+      if (!response.ok) throw new Error(resData.error || "Erreur lors de la diffusion.");
 
-      setStatus({ msg: `🚀 Message envoyé à ${resData.sentTo} appareil(s).`, type: 'success' });
+      setStatus({ msg: `🚀 Diffusé à ${resData.sentTo} appareil(s).`, type: 'success' });
       setCustomMessage("");
     } catch (err: any) {
       setStatus({ msg: `❌ ${err.message}`, type: 'error' });
@@ -111,13 +145,20 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
   return (
     <div className="px-6 py-8 flex flex-col items-center pb-32">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden mb-8 aspect-[4/5] relative">
-         <img src={data.imageUrl} className="w-full h-full object-cover" alt="Zen" />
+         <img src={data.imageUrl} className="w-full h-full object-cover" alt="Focus" />
          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-8 flex flex-col justify-end">
             <h2 className="text-white text-3xl font-bold">{data.title}</h2>
          </div>
       </div>
 
       <div className="w-full max-w-md space-y-4">
+        {/* Diagnostic de permission */}
+        {permissionState === 'denied' && (
+            <div className="p-4 bg-red-100 text-red-700 rounded-xl text-xs font-bold border border-red-200">
+                ⚠️ Notifications bloquées par votre navigateur. Réinitialisez les permissions du site.
+            </div>
+        )}
+
         {status && (
           <div className={`p-4 rounded-2xl text-sm font-semibold border ${
             status.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' : 
@@ -129,19 +170,28 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
         )}
 
         {!isSubscribed ? (
-          <button 
-            onClick={subscribe}
-            disabled={loading}
-            className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-all disabled:opacity-50"
-          >
-            {loading ? "Chargement..." : "Activer les Notifications"}
-          </button>
+          <div className="space-y-2">
+            <button 
+                onClick={resetAndSubscribe}
+                disabled={loading}
+                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-all disabled:opacity-50"
+            >
+                {loading ? "Veuillez patienter..." : "Activer les Notifications"}
+            </button>
+            <p className="text-[10px] text-slate-400 text-center uppercase tracking-widest font-bold">
+                Requiert HTTPS et autorisation navigateur
+            </p>
+          </div>
         ) : (
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-600">Appareil enregistré</span>
+                <button onClick={resetAndSubscribe} className="text-[10px] text-slate-400 underline uppercase">Réinitialiser</button>
+            </div>
             <textarea 
               value={customMessage}
               onChange={(e) => setCustomMessage(e.target.value)}
-              placeholder="Diffuser un message..."
+              placeholder="Écrivez un message ici..."
               className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm h-24 resize-none"
             />
             <button 
