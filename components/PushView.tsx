@@ -33,6 +33,7 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
     title: "Zen PWA Gallery",
     body: "Une nouvelle image a été ajoutée à la galerie !",
     url: "/",
+    imageUrl: "https://picsum.photos/seed/push/600/300",
     targetUserId: "all"
   });
 
@@ -58,8 +59,6 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
         setIsSubscribed(!!sub);
-        
-        // Si on est abonné, on récupère l'identité stockée
         if (sub) {
           const storedId = localStorage.getItem('zen_pwa_user_id');
           if (storedId) setSelectedMyIdentity(storedId);
@@ -104,8 +103,6 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       const perm = await Notification.requestPermission();
       if (perm === 'granted') {
         const reg = await navigator.serviceWorker.ready;
-        
-        // On s'assure de nettoyer tout ancien abonnement résiduel
         const oldSub = await reg.pushManager.getSubscription();
         if (oldSub) await oldSub.unsubscribe();
 
@@ -172,21 +169,28 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
       
       <div className="w-full max-w-md mb-8">
         <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block px-1 tracking-wider">Aperçu du rendu</label>
-        <div className="bg-white/80 backdrop-blur-md border border-white shadow-xl rounded-2xl p-4 flex items-start space-x-4">
-          <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-inner">
-            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-          </div>
-          <div className="flex-grow min-w-0">
-            <div className="flex justify-between items-center mb-0.5">
-              <h4 className="font-bold text-slate-800 text-sm truncate">{pushContent.title || "Titre"}</h4>
-              <span className="text-[10px] text-slate-400">Maintenant</span>
+        <div className="bg-white/80 backdrop-blur-md border border-white shadow-xl rounded-2xl overflow-hidden">
+          <div className="p-4 flex items-start space-x-4">
+            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-inner">
+              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
             </div>
-            <p className="text-sm text-slate-600 line-clamp-2 leading-tight">
-              {pushContent.body || "Le contenu de votre message apparaîtra ici..."}
-            </p>
+            <div className="flex-grow min-w-0">
+              <div className="flex justify-between items-center mb-0.5">
+                <h4 className="font-bold text-slate-800 text-sm truncate">{pushContent.title || "Titre"}</h4>
+                <span className="text-[10px] text-slate-400">Maintenant</span>
+              </div>
+              <p className="text-sm text-slate-600 line-clamp-2 leading-tight">
+                {pushContent.body || "Le contenu de votre message apparaîtra ici..."}
+              </p>
+            </div>
           </div>
+          {pushContent.imageUrl && (
+            <div className="px-4 pb-4">
+              <img src={pushContent.imageUrl} className="w-full h-32 object-cover rounded-lg border border-slate-100" alt="Notification preview" />
+            </div>
+          )}
         </div>
       </div>
 
@@ -225,13 +229,13 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase px-1">Titre de l'alerte</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase px-1">URL de l'image (HTTPS)</label>
                   <input 
                     type="text"
-                    value={pushContent.title}
-                    onChange={(e) => setPushContent({...pushContent, title: e.target.value})}
-                    placeholder="Ex: Alerte Matériel"
-                    className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm font-semibold focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all"
+                    value={pushContent.imageUrl}
+                    onChange={(e) => setPushContent({...pushContent, imageUrl: e.target.value})}
+                    placeholder="https://images.unsplash.com/..."
+                    className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all font-mono"
                   />
                 </div>
 
@@ -259,37 +263,31 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
-                  <span>{pushContent.targetUserId === 'all' ? "Diffuser à tous" : "Envoyer à l'utilisateur"}</span>
+                  <span>Diffuser avec image</span>
                 </>
               )}
             </button>
 
-            <button 
-              onClick={handleUnsubscribe}
-              disabled={loading}
-              className="w-full py-2 text-slate-400 text-xs font-medium hover:text-red-500 transition-colors"
-            >
-              Réinitialiser l'abonnement sur cet appareil
+            <button onClick={handleUnsubscribe} className="w-full py-2 text-slate-400 text-xs font-medium hover:text-red-500 transition-colors">
+              Réinitialiser l'abonnement
             </button>
           </div>
         )}
 
         {!isSubscribed && (
           <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm text-center space-y-6">
+            {/* ... code identique au précédent ... */}
             <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-2">
                <svg className="w-8 h-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                </svg>
             </div>
-            
             <div className="space-y-2">
-              <h3 className="font-bold text-lg text-slate-800">Qui êtes-vous ?</h3>
-              <p className="text-sm text-slate-500">Choisissez votre profil pour lier cet appareil à votre compte.</p>
-              
+              <h3 className="font-bold text-lg text-slate-800">Identité requise</h3>
               <select 
                 value={selectedMyIdentity}
                 onChange={(e) => setSelectedMyIdentity(e.target.value)}
-                className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-200 focus:bg-white transition-all appearance-none cursor-pointer"
+                className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl outline-none text-sm font-medium text-slate-700"
               >
                 <option value="">-- Sélectionnez votre nom --</option>
                 {users.map(u => (
@@ -297,13 +295,12 @@ export const PushView: React.FC<PushViewProps> = ({ data }) => {
                 ))}
               </select>
             </div>
-
             <button 
               onClick={handleSubscribeClick}
               disabled={loading || !selectedMyIdentity}
-              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold active:scale-95 transition-all disabled:opacity-30"
+              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold active:scale-95 transition-all"
             >
-              {loading ? "Chargement..." : "S'abonner sur cet appareil"}
+              S'abonner maintenant
             </button>
           </div>
         )}

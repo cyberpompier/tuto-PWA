@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-pwa-v7';
+const CACHE_NAME = 'zen-pwa-v8';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -26,14 +26,14 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Gestion robuste des notifications entrantes
 self.addEventListener('push', (event) => {
   console.log('[SW] Notification reçue');
   
   let data = { 
     title: 'Zen PWA', 
     body: 'Nouveau message reçu !', 
-    url: '/' 
+    url: '/',
+    image: null
   };
 
   if (event.data) {
@@ -49,6 +49,7 @@ self.addEventListener('push', (event) => {
     body: data.body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
+    image: data.image, // Affichage de la grande image
     data: { url: data.url || '/' },
     vibrate: [200, 100, 200],
     actions: [

@@ -23,7 +23,7 @@ serve(async (req) => {
 
   try {
     const requestData = await req.json().catch(() => ({}));
-    const { title, body, url, targetUserId } = requestData;
+    const { title, body, url, imageUrl, targetUserId } = requestData;
 
     if (!body) {
       return new Response(JSON.stringify({ error: "Le contenu du message est requis" }), {
@@ -36,15 +36,10 @@ serve(async (req) => {
     const projectUrl = Deno.env.get('SUPABASE_URL');
     const supabase = createClient(projectUrl!, serviceKey!);
 
-    // Construction de la requête pour les abonnements
     let query = supabase.from('push_subscriptions').select('*');
     
-    // Si un utilisateur spécifique est ciblé (et que ce n'est pas 'all')
     if (targetUserId && targetUserId !== 'all') {
-      console.log(`[send-push] Ciblage de l'utilisateur : ${targetUserId}`);
       query = query.eq('user_id', targetUserId);
-    } else {
-      console.log(`[send-push] Diffusion générale (Broadcast)`);
     }
 
     const { data: subs, error: dbError } = await query;
@@ -59,7 +54,8 @@ serve(async (req) => {
     const payload = JSON.stringify({
       title: title || 'Zen PWA Gallery',
       body,
-      url: url || '/'
+      url: url || '/',
+      image: imageUrl // C'est ici qu'on transmet l'image au Service Worker
     });
 
     const results = await Promise.all(subs.map(async (item) => {
@@ -67,7 +63,6 @@ serve(async (req) => {
         await webpush.sendNotification(item.subscription, payload);
         return { success: true };
       } catch (err) {
-        // Suppression si l'abonnement a expiré
         if (err.statusCode === 410 || err.statusCode === 404) {
           await supabase.from('push_subscriptions').delete().eq('id', item.id);
         }
